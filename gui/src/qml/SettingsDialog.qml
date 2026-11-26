@@ -995,6 +995,31 @@ DialogView {
 
                     Label {
                         Layout.alignment: Qt.AlignRight
+                        text: qsTr("Frame Generation:")
+                    }
+
+                    C.ComboBox {
+                        Layout.preferredWidth: 400
+                        model: [qsTr("Off"), qsTr("2x (extrapolated, no added delay)"), qsTr("3x (extrapolated, no added delay)"), qsTr("4x (extrapolated, no added delay)")]
+                        enabled: Chiaki.settings.directFrameMapping
+                        currentIndex: Chiaki.settings.frameGenEnabled ? Chiaki.settings.frameGenMultiplier - 1 : 0
+                        onActivated: (index) => {
+                            if (index === 0) {
+                                Chiaki.settings.frameGenEnabled = false;
+                            } else {
+                                Chiaki.settings.frameGenMultiplier = index + 1;
+                                Chiaki.settings.frameGenEnabled = true;
+                            }
+                        }
+                    }
+
+                    Label {
+                        Layout.alignment: Qt.AlignRight
+                        text: qsTr("(Off)")
+                    }
+
+                    Label {
+                        Layout.alignment: Qt.AlignRight
                         text: qsTr("Renderer Backend:")
                     }
 

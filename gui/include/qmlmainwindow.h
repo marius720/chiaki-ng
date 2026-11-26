@@ -24,6 +24,8 @@ extern "C" {
 #include <libplacebo/cache.h>
 }
 
+#include "framegen.h"
+
 #include <vulkan/vulkan.h>
 #if defined(Q_OS_LINUX)
 #include <xcb/xcb.h>
@@ -293,6 +295,8 @@ private:
     QMutex direct_frame_mutex;
     AVFrame *direct_pending_frame = nullptr;
     struct pl_frame direct_frame = {};
+    // Motion-extrapolated frame generation (direct mapping only); owned, render thread.
+    FrameGen *frame_gen = nullptr;
     QAtomicInteger<int> direct_frame_reset = 0;
     uint64_t ts_start = 0;
     double queue_pts_origin = -1.0;

@@ -2681,6 +2681,11 @@ QmlMainWindow::~QmlMainWindow()
     pl_renderer_destroy(&placebo_renderer);
     // User shader hooks hold a reference to the GPU (their descriptors destroy
     // buffers/textures via p->gpu), so they must be released before the GPU is.
+    if (frame_gen) {
+        frame_gen->destroyGpuResources();
+        delete frame_gen;
+        frame_gen = nullptr;
+    }
     pl_mpv_user_shader_destroy(&fsr_hook);
     pl_mpv_user_shader_destroy(&fsrcnnx_hook_8);
     pl_mpv_user_shader_destroy(&fsrcnnx_hook_16);
@@ -4835,6 +4840,11 @@ void QmlMainWindow::doneOpenGLContextCurrent()
 void QmlMainWindow::init(Settings *settings, bool exit_app_on_stream_exit)
 {
     bypass_frame_queue = settings->GetDirectFrameMapping();
+    if (!frame_gen) {
+        frame_gen = new FrameGen([this]() {
+            scheduleUpdate(true, UpdateRequestReason::Timer);
+        });
+    }
     render_backend = settings->GetRenderBackend();
     setSurfaceType(render_backend == RenderBackend::Vulkan ? QWindow::VulkanSurface : QWindow::OpenGLSurface);
     qparams = {};
@@ -6755,9 +6765,16 @@ void QmlMainWindow::render()
     const double present_interval_s = refresh_interval_s;
     const bool stream_active = stream_session_active.loadAcquire() != 0;
     const bool timer_owned_playback = stream_active && mixer_active;
-    const double present_submit_interval_s = timer_owned_playback
-        ? present_interval_s
-        : stream_interval_s;
+    const bool frame_gen_wanted = bypass_frame_queue && stream_active && has_settings &&
+        settings->GetFrameGenEnabled();
+    if (frame_gen)
+        frame_gen->configure(frame_gen_wanted, has_settings ? settings->GetFrameGenMultiplier() : 2);
+    const bool frame_gen_active = frame_gen && frame_gen->enabled();
+    // Generated frames are timed by the frame generation pacer, and stream frames must
+    // reach the screen the moment they are decoded, so presentation is not throttled.
+    const double present_submit_interval_s = frame_gen_active
+        ? 0.0
+        : (timer_owned_playback ? present_interval_s : stream_interval_s);
     const qint64 present_interval_us = static_cast<qint64>(qMax(1.0, vsync_duration * 1000000.0) + 0.5);
     const bool pending_overflow_waiting = hasPendingFrameOverflow();
     const bool pending_frame_waiting = snapshotQueueDepth() >= effectiveQueueDepthLimit() || hasPendingFrame();
@@ -6793,6 +6810,8 @@ void QmlMainWindow::render()
         if (reset_direct_frame) {
             pl_unmap_avframe(placeboGpu(), &direct_frame);
             direct_frame = {};
+            if (frame_gen)
+                frame_gen->reset();
         }
         if (incoming) {
             pl_unmap_avframe(placeboGpu(), &direct_frame);
@@ -6806,6 +6825,10 @@ void QmlMainWindow::render()
                 direct_frame = {};
                 if (backend && backend->zeroCopy())
                     backend->disableZeroCopy();
+                if (frame_gen)
+                    frame_gen->reset();
+            } else if (frame_gen_active) {
+                frame_gen->onNewFrame(chiaki_time_now_monotonic_us(), stream_interval_s);
             }
             av_frame_free(&incoming);
         }
@@ -7539,10 +7562,17 @@ void QmlMainWindow::render()
                                                fsr_hook, fsrcnnx_hook_8, fsrcnnx_hook_16);
         }
     }
-    const struct pl_hook *active_hooks[] = {fsrcnnx_hook};
+    const struct pl_hook *active_hooks[2] = {fsrcnnx_hook, nullptr};
+    int active_hook_count = fsrcnnx_hook ? 1 : 0;
+    if (frame_gen_active && bypass_frame_queue && direct_render_frame.num_planes > 0) {
+        frame_gen->prepareRender(chiaki_time_now_monotonic_us());
+        active_hooks[active_hook_count++] = frame_gen->hook();
+        params.hooks = active_hooks;
+        params.num_hooks = active_hook_count;
+    }
     if (fsrcnnx_hook) {
         params.hooks = active_hooks;
-        params.num_hooks = 1;
+        params.num_hooks = active_hook_count;
         switch (video_preset) {
         case VideoPreset::HighQualitySpatial:
             if (fsrcnnx_hook == fsr_hook)

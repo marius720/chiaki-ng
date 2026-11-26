@@ -989,6 +989,32 @@ void QmlSettings::setDirectFrameMapping(bool enabled)
     emit directFrameMappingChanged();
 }
 
+bool QmlSettings::frameGenEnabled() const
+{
+    return settings->GetFrameGenEnabled();
+}
+
+void QmlSettings::setFrameGenEnabled(bool enabled)
+{
+    if (enabled == settings->GetFrameGenEnabled())
+        return;
+    settings->SetFrameGenEnabled(enabled);
+    emit frameGenEnabledChanged();
+}
+
+int QmlSettings::frameGenMultiplier() const
+{
+    return settings->GetFrameGenMultiplier();
+}
+
+void QmlSettings::setFrameGenMultiplier(int multiplier)
+{
+    if (multiplier == settings->GetFrameGenMultiplier())
+        return;
+    settings->SetFrameGenMultiplier(multiplier);
+    emit frameGenMultiplierChanged();
+}
+
 void QmlSettings::setPlaceboFrameMixer(int mixer)
 {
     settings->SetPlaceboFrameMixer(static_cast<PlaceboFrameMixer>(mixer));
