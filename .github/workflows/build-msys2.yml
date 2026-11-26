@@ -1,6 +1,9 @@
 name: Build chiaki-ng msys2 x86 Windows
 
 on:
+  push:
+    branches:
+      - gta-klient
   workflow_dispatch:
     inputs:
       libplacebo_version:
