@@ -1015,6 +1015,19 @@ void QmlSettings::setFrameGenMultiplier(int multiplier)
     emit frameGenMultiplierChanged();
 }
 
+int QmlSettings::sharpenStrength() const
+{
+    return settings->GetSharpenStrength();
+}
+
+void QmlSettings::setSharpenStrength(int strength)
+{
+    if (strength == settings->GetSharpenStrength())
+        return;
+    settings->SetSharpenStrength(strength);
+    emit sharpenStrengthChanged();
+}
+
 void QmlSettings::setPlaceboFrameMixer(int mixer)
 {
     settings->SetPlaceboFrameMixer(static_cast<PlaceboFrameMixer>(mixer));

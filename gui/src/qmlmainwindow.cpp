@@ -7562,8 +7562,16 @@ void QmlMainWindow::render()
                                                fsr_hook, fsrcnnx_hook_8, fsrcnnx_hook_16);
         }
     }
-    const struct pl_hook *active_hooks[2] = {fsrcnnx_hook, nullptr};
+    const struct pl_hook *active_hooks[3] = {fsrcnnx_hook, nullptr, nullptr};
     int active_hook_count = fsrcnnx_hook ? 1 : 0;
+    video_sharpen.configure(stream_active && has_settings
+        ? static_cast<float>(settings->GetSharpenStrength()) / 100.0f
+        : 0.0f);
+    if (video_sharpen.enabled() && hint_frame) {
+        active_hooks[active_hook_count++] = video_sharpen.hook();
+        params.hooks = active_hooks;
+        params.num_hooks = active_hook_count;
+    }
     if (frame_gen_active && bypass_frame_queue && direct_render_frame.num_planes > 0) {
         frame_gen->prepareRender(chiaki_time_now_monotonic_us());
         active_hooks[active_hook_count++] = frame_gen->hook();

@@ -1020,6 +1020,23 @@ DialogView {
 
                     Label {
                         Layout.alignment: Qt.AlignRight
+                        text: qsTr("Sharpening:")
+                    }
+
+                    C.ComboBox {
+                        Layout.preferredWidth: 400
+                        model: [qsTr("Off"), qsTr("Low"), qsTr("Medium"), qsTr("High"), qsTr("Maximum")]
+                        currentIndex: Math.round(Chiaki.settings.sharpenStrength / 25)
+                        onActivated: index => Chiaki.settings.sharpenStrength = index * 25
+                    }
+
+                    Label {
+                        Layout.alignment: Qt.AlignRight
+                        text: qsTr("(Medium)")
+                    }
+
+                    Label {
+                        Layout.alignment: Qt.AlignRight
                         text: qsTr("Renderer Backend:")
                     }
 

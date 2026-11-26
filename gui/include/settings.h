@@ -524,6 +524,8 @@ class Settings : public QObject
 		void SetFrameGenEnabled(bool enabled) { settings.setValue("settings/frame_gen_enabled", enabled); }
 		int GetFrameGenMultiplier() const { return qBound(2, settings.value("settings/frame_gen_multiplier", 2).toInt(), 4); }
 		void SetFrameGenMultiplier(int multiplier) { settings.setValue("settings/frame_gen_multiplier", qBound(2, multiplier, 4)); }
+		int GetSharpenStrength() const { return qBound(0, settings.value("settings/sharpen_strength", 50).toInt(), 100); }
+		void SetSharpenStrength(int strength) { settings.setValue("settings/sharpen_strength", qBound(0, strength, 100)); }
 		void SetPlaceboFrameMixer(PlaceboFrameMixer frame_mixer);
 
 		bool GetPlaceboDeinterlaceEnabled() const;

@@ -125,7 +125,54 @@ const char *const kShaderWarp =
 	"vec2 p1 = uv - fg_phase * f0.xy * f0.z;                                  \n"
 	"vec4 f1 = textureLod(fg_flow, p1, 0.0);                                  \n"
 	"vec2 src = clamp(uv - fg_phase * f1.xy * f1.z, vec2(0.0), vec2(1.0));    \n"
-	"color = textureLod(fg_src, fg_in_off + src * fg_in_scale, 0.0);          \n";
+	// Catmull-Rom resampling (9 bilinear taps) keeps texture detail that a
+	// plain bilinear fetch would smear in every generated frame.
+	"vec2 spos = (fg_in_off + src * fg_in_scale) / fg_px;                     \n"
+	"vec2 tp1 = floor(spos - 0.5) + 0.5;                                      \n"
+	"vec2 f = spos - tp1;                                                     \n"
+	"vec2 w0 = f * (-0.5 + f * (1.0 - 0.5 * f));                              \n"
+	"vec2 w1 = 1.0 + f * f * (-2.5 + 1.5 * f);                                \n"
+	"vec2 w2 = f * (0.5 + f * (2.0 - 1.5 * f));                               \n"
+	"vec2 w3 = f * f * (-0.5 + 0.5 * f);                                      \n"
+	"vec2 w12 = w1 + w2;                                                      \n"
+	"vec2 tp0 = (tp1 - 1.0) * fg_px;                                          \n"
+	"vec2 tp3 = (tp1 + 2.0) * fg_px;                                          \n"
+	"vec2 tp12 = (tp1 + w2 / w12) * fg_px;                                    \n"
+	"vec4 acc = vec4(0.0);                                                    \n"
+	"acc += textureLod(fg_src, vec2(tp0.x,  tp0.y),  0.0) * (w0.x  * w0.y);   \n"
+	"acc += textureLod(fg_src, vec2(tp12.x, tp0.y),  0.0) * (w12.x * w0.y);   \n"
+	"acc += textureLod(fg_src, vec2(tp3.x,  tp0.y),  0.0) * (w3.x  * w0.y);   \n"
+	"acc += textureLod(fg_src, vec2(tp0.x,  tp12.y), 0.0) * (w0.x  * w12.y);  \n"
+	"acc += textureLod(fg_src, vec2(tp12.x, tp12.y), 0.0) * (w12.x * w12.y);  \n"
+	"acc += textureLod(fg_src, vec2(tp3.x,  tp12.y), 0.0) * (w3.x  * w12.y);  \n"
+	"acc += textureLod(fg_src, vec2(tp0.x,  tp3.y),  0.0) * (w0.x  * w3.y);   \n"
+	"acc += textureLod(fg_src, vec2(tp12.x, tp3.y),  0.0) * (w12.x * w3.y);   \n"
+	"acc += textureLod(fg_src, vec2(tp3.x,  tp3.y),  0.0) * (w3.x  * w3.y);   \n"
+	// Keep the result inside the local range so the negative lobes cannot ring.
+	"vec4 nb = textureLod(fg_src, tp12, 0.0);                               \n"
+	"vec4 lo = min(nb, min(textureLod(fg_src, tp12 - fg_px, 0.0),           \n"
+	"                        textureLod(fg_src, tp12 + fg_px, 0.0)));         \n"
+	"vec4 hi = max(nb, max(textureLod(fg_src, tp12 - fg_px, 0.0),           \n"
+	"                        textureLod(fg_src, tp12 + fg_px, 0.0)));         \n"
+	"color = clamp(acc, lo - 0.02, hi + 0.02);                                \n";
+
+// Contrast adaptive sharpening (after AMD FidelityFX CAS, sharpen-only path).
+const char *const kShaderSharpen =
+	"vec2 uv = gl_FragCoord.xy / fg_tsize;                                   \n"
+	"vec2 px = 1.0 / fg_tsize;                                                \n"
+	"vec4 e4 = textureLod(fg_src, uv, 0.0);                                   \n"
+	"vec3 e = e4.rgb;                                                         \n"
+	"vec3 b = textureLod(fg_src, uv + vec2( 0.0, -1.0) * px, 0.0).rgb;        \n"
+	"vec3 d = textureLod(fg_src, uv + vec2(-1.0,  0.0) * px, 0.0).rgb;        \n"
+	"vec3 f = textureLod(fg_src, uv + vec2( 1.0,  0.0) * px, 0.0).rgb;        \n"
+	"vec3 h = textureLod(fg_src, uv + vec2( 0.0,  1.0) * px, 0.0).rgb;        \n"
+	"vec3 mn = min(e, min(min(b, d), min(f, h)));                             \n"
+	"vec3 mx = max(e, max(max(b, d), max(f, h)));                             \n"
+	"vec3 amp = clamp(min(mn, 1.0 - mx) / max(mx, vec3(1.0e-4)), 0.0, 1.0);   \n"
+	"amp = sqrt(amp);                                                         \n"
+	"vec3 w = amp * (-1.0 / mix(8.0, 5.0, fg_sharp));                         \n"
+	"vec3 res = ((b + d + f + h) * w + e) / (1.0 + 4.0 * w);                  \n"
+	"color = vec4(clamp(mix(e, res, clamp(fg_sharp * 2.0, 0.0, 1.0)), 0.0, 1.0), e4.a); \n";
 
 struct PassTex
 {
@@ -470,8 +517,9 @@ struct pl_hook_res FrameGen::runHook(const struct pl_hook_params *params)
 		return res;
 
 	const PassTex tex[] = {{"fg_src", params->tex}, {"fg_flow", flow_smooth}};
-	const PassVar vars[] = {{"fg_in_off", in_off, 2}, {"fg_in_scale", in_scale, 2}, {"fg_phase", &phase, 1}};
-	if (!runPass(params->dispatch, out, "framegen warp", kShaderWarp, tex, 2, vars, 3)) {
+	const float src_px[2] = {1.0f / tex_w, 1.0f / tex_h};
+	const PassVar vars[] = {{"fg_in_off", in_off, 2}, {"fg_in_scale", in_scale, 2}, {"fg_phase", &phase, 1}, {"fg_px", src_px, 2}};
+	if (!runPass(params->dispatch, out, "framegen warp", kShaderWarp, tex, 2, vars, 4)) {
 		broken = true;
 		disarmPacer();
 		return res;
@@ -580,4 +628,55 @@ void FrameGen::pacerLoop()
 	if (timer)
 		CloseHandle(timer);
 #endif
+}
+
+VideoSharpen::VideoSharpen()
+{
+	hook_def = {};
+	hook_def.stages = PL_HOOK_OUTPUT;
+	hook_def.input = PL_HOOK_SIG_TEX;
+	hook_def.priv = this;
+	hook_def.hook = &VideoSharpen::hookCallback;
+	hook_def.signature = 0x7368617270656e31ULL; // "sharpen1"
+}
+
+void VideoSharpen::configure(float new_strength)
+{
+	strength = std::max(0.0f, std::min(1.0f, new_strength));
+}
+
+struct pl_hook_res VideoSharpen::hookCallback(void *priv, const struct pl_hook_params *params)
+{
+	return static_cast<VideoSharpen *>(priv)->runHook(params);
+}
+
+struct pl_hook_res VideoSharpen::runHook(const struct pl_hook_params *params)
+{
+	struct pl_hook_res res = {};
+	res.output = PL_HOOK_SIG_NONE;
+
+	if (!enabled() || !params->tex || !params->dispatch || !params->get_tex)
+		return res;
+
+	// The output stage is not resizable: same texture size, same rect.
+	const int w = params->tex->params.w;
+	const int h = params->tex->params.h;
+	pl_tex out = params->get_tex(params->priv, w, h);
+	if (!out)
+		return res;
+
+	const PassTex tex[] = {{"fg_src", params->tex}};
+	const PassVar vars[] = {{"fg_sharp", &strength, 1}};
+	if (!runPass(params->dispatch, out, "video sharpen", kShaderSharpen, tex, 1, vars, 1)) {
+		broken = true;
+		return res;
+	}
+
+	res.output = PL_HOOK_SIG_TEX;
+	res.tex = out;
+	res.repr = params->repr;
+	res.color = params->color;
+	res.components = params->components;
+	res.rect = params->rect;
+	return res;
 }

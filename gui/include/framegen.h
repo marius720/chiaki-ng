@@ -109,4 +109,28 @@ private:
 	int pacer_steps = 0;
 };
 
+/**
+ * Contrast adaptive sharpening of the final picture (libplacebo OUTPUT stage,
+ * i.e. after upscaling and colour management, in display encoding).
+ * Render thread only.
+ */
+class VideoSharpen
+{
+public:
+	VideoSharpen();
+
+	/// strength: 0 (off) .. 1 (maximum)
+	void configure(float strength);
+	bool enabled() const { return strength > 0.001f && !broken; }
+	const struct pl_hook *hook() const { return &hook_def; }
+
+private:
+	static struct pl_hook_res hookCallback(void *priv, const struct pl_hook_params *params);
+	struct pl_hook_res runHook(const struct pl_hook_params *params);
+
+	struct pl_hook hook_def;
+	float strength = 0.0f;
+	bool broken = false;
+};
+
 #endif // CHIAKI_FRAMEGEN_H

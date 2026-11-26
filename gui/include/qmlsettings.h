@@ -102,6 +102,7 @@ class QmlSettings : public QObject
 	Q_PROPERTY(bool directFrameMapping READ directFrameMapping WRITE setDirectFrameMapping NOTIFY directFrameMappingChanged)
 	Q_PROPERTY(bool frameGenEnabled READ frameGenEnabled WRITE setFrameGenEnabled NOTIFY frameGenEnabledChanged)
 	Q_PROPERTY(int frameGenMultiplier READ frameGenMultiplier WRITE setFrameGenMultiplier NOTIFY frameGenMultiplierChanged)
+	Q_PROPERTY(int sharpenStrength READ sharpenStrength WRITE setSharpenStrength NOTIFY sharpenStrengthChanged)
 	Q_PROPERTY(bool placeboDeinterlaceEnabled READ placeboDeinterlaceEnabled WRITE setPlaceboDeinterlaceEnabled NOTIFY placeboDeinterlaceEnabledChanged)
 	Q_PROPERTY(int placeboDeinterlacePreset READ placeboDeinterlacePreset WRITE setPlaceboDeinterlacePreset NOTIFY placeboDeinterlacePresetChanged)
 	Q_PROPERTY(int placeboDeinterlaceAlgorithm READ placeboDeinterlaceAlgorithm WRITE setPlaceboDeinterlaceAlgorithm NOTIFY placeboDeinterlaceAlgorithmChanged)
@@ -353,6 +354,8 @@ public:
     void setFrameGenEnabled(bool enabled);
     int frameGenMultiplier() const;
     void setFrameGenMultiplier(int multiplier);
+    int sharpenStrength() const;
+    void setSharpenStrength(int strength);
     void setPlaceboFrameMixer(int mixer);
 
     bool placeboDeinterlaceEnabled() const;
@@ -712,6 +715,7 @@ signals:
     void directFrameMappingChanged();
     void frameGenEnabledChanged();
     void frameGenMultiplierChanged();
+    void sharpenStrengthChanged();
     void placeboDeinterlaceEnabledChanged();
     void placeboDeinterlacePresetChanged();
     void placeboDeinterlaceAlgorithmChanged();

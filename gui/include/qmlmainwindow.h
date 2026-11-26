@@ -297,6 +297,8 @@ private:
     struct pl_frame direct_frame = {};
     // Motion-extrapolated frame generation (direct mapping only); owned, render thread.
     FrameGen *frame_gen = nullptr;
+    // Contrast adaptive sharpening of the final picture; render thread.
+    VideoSharpen video_sharpen;
     QAtomicInteger<int> direct_frame_reset = 0;
     uint64_t ts_start = 0;
     double queue_pts_origin = -1.0;
